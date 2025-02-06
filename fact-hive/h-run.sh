@@ -24,8 +24,6 @@ trap cleanup SIGTERM SIGINT
 # Clear previous logs
 echo "Starting fact-worker..." | tee "$LOG_FILE"
 
-WALLET="%WAL%"  # Hive OS will replace this with the configured wallet
-
 # Check if fact-worker exists in Docker
 if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
     echo "fact-worker not found. Installing..." | tee -a "$LOG_FILE"
@@ -44,7 +42,7 @@ if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
     sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE"
 
     # Re-run setup in case Docker was not running previously
-    sh setup_worker.sh "$WALLET" 2>&1 | tee -a "$LOG_FILE"
+    sh setup_worker.sh "$WALLET" "$PASS" 2>&1 | tee -a "$LOG_FILE"
 else
     echo "fact-worker already exists. Starting..." | tee -a "$LOG_FILE"
 fi
