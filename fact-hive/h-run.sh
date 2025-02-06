@@ -11,18 +11,19 @@ LOG_FILE="$LOG_DIR/miner.log"
 mkdir -p "$LOG_DIR"
 touch "$LOG_FILE"
 
-# Function to handle cleanup when Hive OS stops the miner
-cleanup() {
-    echo "Stopping fact-worker..." | tee -a "$LOG_FILE"
-    sudo docker stop fact-worker 2>&1 | tee -a "$LOG_FILE"
-    exit 0
-}
+# Debug: Print the received environment variables
+echo "CUSTOM_TEMPLATE: $CUSTOM_TEMPLATE" | tee -a "$LOG_FILE"
+echo "CUSTOM_PASS: $CUSTOM_PASS" | tee -a "$LOG_FILE"
 
-# Trap SIGTERM and SIGINT (sent when Hive OS stops the miner)
-trap cleanup SIGTERM SIGINT
+# Extract wallet and password
+WALLET="${CUSTOM_TEMPLATE:-default_wallet_address}"
+PASS="${CUSTOM_PASS:-x}"  # Default to "x" if CUSTOM_PASS is empty
 
 # Clear previous logs
-echo "Starting fact-worker..." | tee "$LOG_FILE"
+echo "Starting fact-worker with WALLET=$WALLET and PASS=$PASS" | tee "$LOG_FILE"
+
+# Path to application.yml on the host system
+APP_YML="./application.yml"  # Replace with the actual path to application.yml on your host
 
 # Check if fact-worker exists in Docker
 if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
@@ -30,7 +31,7 @@ if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
     
     wget -O setup_worker.sh https://github.com/filthz/fact-worker-public/releases/download/base_files/setup_worker.sh 2>&1 | tee -a "$LOG_FILE"
     chmod +x setup_worker.sh 2>&1 | tee -a "$LOG_FILE"
-    sh setup_worker.sh "$CUSTOM_TEMPLATE" "$CUSTOM_PASS" 2>&1 | tee -a "$LOG_FILE"
+    sh setup_worker.sh "$WALLET" "$PASS" 2>&1 | tee -a "$LOG_FILE"
 
     # Install required dependencies
     sudo apt-get install -y iptables arptables ebtables 2>&1 | tee -a "$LOG_FILE"
@@ -42,9 +43,46 @@ if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
     sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE"
 
     # Re-run setup in case Docker was not running previously
-    sh setup_worker.sh "$CUSTOM_TEMPLATE" "$CUSTOM_PASS" 2>&1 | tee -a "$LOG_FILE"
+    sh setup_worker.sh "$WALLET" "$PASS" 2>&1 | tee -a "$LOG_FILE"
 else
-    echo "fact-worker already exists. Starting..." | tee -a "$LOG_FILE"
+    echo "fact-worker already exists. Checking application.yml..." | tee -a "$LOG_FILE"
+
+    # Read the current username and password from the application.yml on the host system
+    if [[ -f "$APP_YML" ]]; then
+        CURRENT_USERNAME=$(grep -oP '^username: "\K[^"]+' "$APP_YML")
+        CURRENT_PASSWORD=$(grep -oP '^password: "\K[^"]+' "$APP_YML")
+
+        echo "Current username: $CURRENT_USERNAME" | tee -a "$LOG_FILE"
+        echo "Current password: $CURRENT_PASSWORD" | tee -a "$LOG_FILE"
+
+        # Flag to determine if application.yml needs updating
+        NEEDS_UPDATE=false
+
+        # Compare username
+        if [[ "$CURRENT_USERNAME" != "$WALLET" ]]; then
+            echo "Updating username in application.yml..." | tee -a "$LOG_FILE"
+            sed -i "s/^username: \".*\"/username: \"$WALLET\"/" "$APP_YML"
+            NEEDS_UPDATE=true
+        fi
+
+        # Compare password
+        if [[ "$CURRENT_PASSWORD" != "$PASS" ]]; then
+            echo "Updating password in application.yml..." | tee -a "$LOG_FILE"
+            sed -i "s/^password: \".*\"/password: \"$PASS\"/" "$APP_YML"
+            NEEDS_UPDATE=true
+        fi
+
+        # If updates were made, rebuild the worker
+        if [[ "$NEEDS_UPDATE" == true ]]; then
+            echo "Changes detected. Running rebuild_worker.sh..." | tee -a "$LOG_FILE"
+            sh rebuild_worker.sh 2>&1 | tee -a "$LOG_FILE"
+        else
+            echo "No changes needed for application.yml." | tee -a "$LOG_FILE"
+        fi
+    else
+        echo "application.yml not found on the host system. Exiting..." | tee -a "$LOG_FILE"
+        exit 1
+    fi
 fi
 
 # Start the Docker container
@@ -52,7 +90,4 @@ sudo docker start fact-worker 2>&1 | tee -a "$LOG_FILE"
 
 # Keep the script running to prevent Hive OS from marking it as stopped
 echo "Monitoring Docker logs..."
-sudo docker logs -f fact-worker 2>&1 | tee -a "$LOG_FILE" &
-
-# Wait for the logging process to exit (so the script stays alive)
-wait
+sudo docker logs -f fact-worker 2>&1 | tee -a "$LOG_FILE"
