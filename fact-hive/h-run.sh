@@ -30,7 +30,7 @@ if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
     
     wget -O setup_worker.sh https://github.com/filthz/fact-worker-public/releases/download/base_files/setup_worker.sh 2>&1 | tee -a "$LOG_FILE"
     chmod +x setup_worker.sh 2>&1 | tee -a "$LOG_FILE"
-    sh setup_worker.sh "$WALLET" 2>&1 | tee -a "$LOG_FILE"
+    sh setup_worker.sh "$CUSTOM_TEMPLATE" "$CUSTOM_PASS" 2>&1 | tee -a "$LOG_FILE"
 
     # Install required dependencies
     sudo apt-get install -y iptables arptables ebtables 2>&1 | tee -a "$LOG_FILE"
@@ -42,7 +42,7 @@ if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
     sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE"
 
     # Re-run setup in case Docker was not running previously
-    sh setup_worker.sh "$WALLET" "$PASS" 2>&1 | tee -a "$LOG_FILE"
+    sh setup_worker.sh "$CUSTOM_TEMPLATE" "$CUSTOM_PASS" 2>&1 | tee -a "$LOG_FILE"
 else
     echo "fact-worker already exists. Starting..." | tee -a "$LOG_FILE"
 fi
