@@ -1,21 +1,36 @@
 #!/usr/bin/env bash
 
-# Check if fact-worker is already running
-if [[ `ps aux | grep "fact-worker" | grep -v grep | wc -l` != 0 ]]; then
-    echo "/hive/miners/custom/fact-worker is already running"
-    exit 1
-fi
+# Enable debug mode to print all commands
+set -x
+
+# Define log file
+LOG_DIR="/var/log/miner/custom/fact-hive"
+LOG_FILE="$LOG_DIR/miner.log"
+
+# Ensure log directory exists
+mkdir -p "$LOG_DIR"
+touch "$LOG_FILE"
+
+# Function to handle cleanup when the miner stops
+cleanup() {
+    echo "Stopping fact-worker Docker container..." | tee -a "$LOG_FILE"
+    sudo docker stop fact-worker 2>&1 | tee -a "$LOG_FILE"
+    exit 0
+}
+
+# Set trap to catch termination signals (SIGTERM, SIGINT)
+trap cleanup SIGTERM SIGINT
 
 # Move to the directory containing this script
 cd `dirname $0`
 
-# Source the configuration file
-if [[ ! -f fact_worker.conf ]]; then
-    echo "Configuration file fact_worker.conf not found. Exiting..."
+# Source the configuration file (fact-hive.conf)
+if [[ ! -f fact-hive.conf ]]; then
+    echo "Configuration file fact-hive.conf not found. Exiting..."
     exit 1
 fi
 
-. fact_worker.conf
+. fact-hive.conf
 
 # Debug: Print the variables loaded from the configuration file
 echo "USERNAME = $USERNAME"
@@ -30,11 +45,10 @@ echo "CUSTOM_CONFIG_FILENAME = $CUSTOM_CONFIG_FILENAME"
 [[ ! -f $CUSTOM_CONFIG_FILENAME ]] && echo "Custom config $CUSTOM_CONFIG_FILENAME is not found. Exiting..." && exit 1
 
 # Ensure the log directory exists
-[[ ! -d $CUSTOM_LOG_BASEDIR ]] && mkdir -p $CUSTOM_LOG_BASEDIR
+[[ ! -d $CUSTOM_LOG_BASEDIR ]] && mkdir -p "$CUSTOM_LOG_BASEDIR"
 
 # Path to application.yml on the host system
-APP_YML="./application.yml"
-[[ ! -f $APP_YML ]] && APP_YML="/hive/miners/custom/fact-hive/application.yml"
+APP_YML="/hive/miners/custom/fact-hive/application.yml"
 
 # Check for application.yml and update it if needed
 if [[ -f "$APP_YML" ]]; then
