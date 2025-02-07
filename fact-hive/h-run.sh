@@ -35,7 +35,7 @@ echo "CUSTOM_LOG_BASENAME = $CUSTOM_LOG_BASENAME"
 echo "CUSTOM_CONFIG_FILENAME = $CUSTOM_CONFIG_FILENAME"
 
 # Ensure required variables are set
-[[ -z $CUSTOM_LOG_BASENAME ]] && echo "No CUSTOM_LOG_BASENAME is set. Exiting..." && exit 1
+[[ -z $CUSTOM_LOG_BASENAME ]] && echo "No CUSTOM_LOG_BASEDIR is set. Exiting..." && exit 1
 [[ -z $CUSTOM_CONFIG_FILENAME ]] && echo "No CUSTOM_CONFIG_FILENAME is set. Exiting..." && exit 1
 [[ ! -f $CUSTOM_CONFIG_FILENAME ]] && echo "Custom config $CUSTOM_CONFIG_FILENAME is not found. Exiting..." && exit 1
 
@@ -44,6 +44,9 @@ echo "CUSTOM_CONFIG_FILENAME = $CUSTOM_CONFIG_FILENAME"
 
 # Path to application.yml on the host system
 APP_YML="/hive/miners/custom/fact-hive/application.yml"
+
+# Full path to rebuild_worker.sh
+REBUILD_SCRIPT="/hive/miners/custom/fact-hive/rebuild_worker.sh"
 
 # Function to handle cleanup when the miner stops
 cleanup() {
@@ -85,6 +88,14 @@ if [[ "$NEEDS_UPDATE" == true ]]; then
     echo "Writing updated application.yml..."
     echo -e "username: \"$USERNAME\"\npassword: \"$PASSWORD\"" > "$APP_YML"
     echo "application.yml updated successfully."
+
+    # Run rebuild_worker.sh if needed
+    if [[ -f "$REBUILD_SCRIPT" ]]; then
+        echo "Changes detected. Running rebuild_worker.sh..."
+        sh "$REBUILD_SCRIPT" 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
+    else
+        echo "Error: $REBUILD_SCRIPT not found. Skipping rebuild step."
+    fi
 else
     echo "No changes needed for application.yml."
 fi
