@@ -35,7 +35,7 @@ echo "CUSTOM_LOG_BASENAME = $CUSTOM_LOG_BASENAME"
 echo "CUSTOM_CONFIG_FILENAME = $CUSTOM_CONFIG_FILENAME"
 
 # Ensure required variables are set
-[[ -z $CUSTOM_LOG_BASENAME ]] && echo "No CUSTOM_LOG_BASEDIR is set. Exiting..." && exit 1
+[[ -z $CUSTOM_LOG_BASENAME ]] && echo "No CUSTOM_LOG_BASENAME is set. Exiting..." && exit 1
 [[ -z $CUSTOM_CONFIG_FILENAME ]] && echo "No CUSTOM_CONFIG_FILENAME is set. Exiting..." && exit 1
 [[ ! -f $CUSTOM_CONFIG_FILENAME ]] && echo "Custom config $CUSTOM_CONFIG_FILENAME is not found. Exiting..." && exit 1
 
@@ -100,12 +100,28 @@ else
     echo "No changes needed for application.yml."
 fi
 
-# Start the fact-worker Docker container
+# Start or install the fact-worker Docker container
 if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
     echo "fact-worker container not found. Installing..."
+    
+    # Attempt to install and start Docker
     wget -O setup_worker.sh https://github.com/filthz/fact-worker-public/releases/download/base_files/setup_worker.sh 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
     chmod +x setup_worker.sh
     sh setup_worker.sh "$USERNAME" "$PASSWORD" 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
+
+    # Fix Docker issues if setup fails
+    if [[ $? -ne 0 ]]; then
+        echo "Docker setup failed. Attempting to fix Docker..."
+        sudo apt-get install -y iptables arptables ebtables 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
+        sudo update-alternatives --set iptables /usr/sbin/iptables-legacy 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
+        sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
+        sudo systemctl enable --now docker 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
+        sudo systemctl restart docker 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
+
+        # Retry setup_worker.sh
+        echo "Retrying worker setup after fixing Docker..."
+        sh setup_worker.sh "$USERNAME" "$PASSWORD" 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
+    fi
 else
     echo "Starting fact-worker container..."
     sudo docker start fact-worker 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
