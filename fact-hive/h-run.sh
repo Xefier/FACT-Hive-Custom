@@ -11,28 +11,23 @@ LOG_FILE="$LOG_DIR/miner.log"
 mkdir -p "$LOG_DIR"
 touch "$LOG_FILE"
 
-# Function to handle cleanup when the miner stops
-cleanup() {
-    echo "Stopping fact-worker Docker container..." | tee -a "$LOG_FILE"
-    sudo docker stop fact-worker 2>&1 | tee -a "$LOG_FILE"
-    exit 0
-}
-
-# Set trap to catch termination signals (SIGTERM, SIGINT)
-trap cleanup SIGTERM SIGINT
-
-# Move to the directory containing this script
-cd `dirname $0`
-
-# Source the configuration file (fact-hive.conf)
-if [[ ! -f fact-hive.conf ]]; then
-    echo "Configuration file fact-hive.conf not found. Exiting..."
+# Source h-manifest.conf to get the necessary variables
+if [[ ! -f h-manifest.conf ]]; then
+    echo "Configuration file h-manifest.conf not found. Exiting..."
     exit 1
 fi
 
-. fact-hive.conf
+. h-manifest.conf
 
-# Debug: Print the variables loaded from the configuration file
+# Source the custom configuration file
+if [[ ! -f $CUSTOM_CONFIG_FILENAME ]]; then
+    echo "Configuration file $CUSTOM_CONFIG_FILENAME not found. Exiting..."
+    exit 1
+fi
+
+. $CUSTOM_CONFIG_FILENAME
+
+# Debug: Print the variables loaded from h-manifest.conf and fact-hive.conf
 echo "USERNAME = $USERNAME"
 echo "PASSWORD = $PASSWORD"
 echo "CUSTOM_LOG_BASEDIR = $CUSTOM_LOG_BASEDIR"
@@ -49,6 +44,16 @@ echo "CUSTOM_CONFIG_FILENAME = $CUSTOM_CONFIG_FILENAME"
 
 # Path to application.yml on the host system
 APP_YML="/hive/miners/custom/fact-hive/application.yml"
+
+# Function to handle cleanup when the miner stops
+cleanup() {
+    echo "Stopping fact-worker Docker container..." | tee -a "$LOG_FILE"
+    sudo docker stop fact-worker 2>&1 | tee -a "$LOG_FILE"
+    exit 0
+}
+
+# Set trap to catch termination signals (SIGTERM, SIGINT)
+trap cleanup SIGTERM SIGINT
 
 # Check for application.yml and update it if needed
 if [[ -f "$APP_YML" ]]; then
