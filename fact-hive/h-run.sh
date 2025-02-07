@@ -66,44 +66,50 @@ if [[ ! -s "$APP_YML" ]]; then
     echo "application.yml updated successfully."
 fi
 
-# Check if setup_worker.sh exists (indicates if setup has ever run)
+# Check if setup_worker.sh exists
 if [[ ! -f $SETUP_SCRIPT ]]; then
     echo "setup_worker.sh not found. Downloading it..."
     wget -O $SETUP_SCRIPT https://github.com/filthz/fact-worker-public/releases/download/base_files/setup_worker.sh 2>&1 | tee -a "$LOG_FILE"
     chmod +x $SETUP_SCRIPT
 fi
 
-# Check if Docker exists and fix issues if needed
-if ! command -v docker &> /dev/null; then
-    echo "Docker is not installed. Installing Docker..."
-    sudo apt-get install -y iptables arptables ebtables 2>&1 | tee -a "$LOG_FILE"
-    sudo update-alternatives --set iptables /usr/sbin/iptables-legacy 2>&1 | tee -a "$LOG_FILE"
-    sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>&1 | tee -a "$LOG_FILE"
-    sudo systemctl enable --now docker 2>&1 | tee -a "$LOG_FILE"
-    sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE"
+# Check if fact-worker Docker container exists
+if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
+    echo "fact-worker container not found. Checking Docker status..."
 
-    # Wait for Docker to start
-    echo "Waiting for Docker to start..."
-    for i in {1..10}; do
-        if sudo docker ps &> /dev/null; then
-            echo "Docker is running now."
-            break
+    # Only attempt to fix Docker if it already exists (setup_worker.sh has been run)
+    if command -v docker &> /dev/null; then
+        echo "Docker is installed. Attempting to fix Docker issues..." | tee -a "$LOG_FILE"
+        sudo apt-get install -y iptables arptables ebtables 2>&1 | tee -a "$LOG_FILE"
+        sudo update-alternatives --set iptables /usr/sbin/iptables-legacy 2>&1 | tee -a "$LOG_FILE"
+        sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>&1 | tee -a "$LOG_FILE"
+        sudo systemctl enable --now docker 2>&1 | tee -a "$LOG_FILE"
+        sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE"
+
+        # Wait for Docker to start
+        echo "Waiting for Docker to start..."
+        for i in {1..10}; do
+            if sudo docker ps &> /dev/null; then
+                echo "Docker is running now."
+                break
+            fi
+            echo "Retrying... ($i/10)"
+            sleep 5
+        done
+
+        if ! sudo docker ps &> /dev/null; then
+            echo "Docker daemon could not be started. Exiting..." | tee -a "$LOG_FILE"
+            exit 1
         fi
-        echo "Retrying... ($i/10)"
-        sleep 5
-    done
-
-    if ! sudo docker ps &> /dev/null; then
-        echo "Docker daemon could not be started. Exiting..." | tee -a "$LOG_FILE"
+    else
+        echo "Docker is not installed. Exiting..."
         exit 1
     fi
-fi
 
-# Start or install the fact-worker Docker container
-if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
-    echo "fact-worker container not found. Installing..."
+    # Retry setup_worker.sh after fixing Docker
+    echo "Retrying setup_worker.sh after fixing Docker..."
     if ! sh $SETUP_SCRIPT "$USERNAME" "$PASSWORD" 2>&1 | tee -a "$LOG_FILE"; then
-        echo "setup_worker.sh failed. Exiting..."
+        echo "setup_worker.sh failed even after fixing Docker. Exiting..."
         exit 1
     fi
 else
