@@ -56,7 +56,10 @@ cleanup() {
 trap cleanup SIGTERM SIGINT
 
 # Check for application.yml and update it if needed
-if [[ -f "$APP_YML" ]]; then
+if [[ ! -s "$APP_YML" ]]; then
+    echo "Error: application.yml is either missing or blank. Rewriting the file..."
+    NEEDS_UPDATE=true
+else
     echo "Found application.yml. Checking for updates..."
 
     CURRENT_USERNAME=$(grep -oP '^username: "\K[^"]+' "$APP_YML")
@@ -64,29 +67,26 @@ if [[ -f "$APP_YML" ]]; then
 
     NEEDS_UPDATE=false
 
-    # Compare and update username
+    # Check if username matches
     if [[ "$CURRENT_USERNAME" != "$USERNAME" ]]; then
-        echo "Updating username in application.yml..."
-        sed -i "s/^username: \".*\"/username: \"$USERNAME\"/" "$APP_YML"
+        echo "Username mismatch detected. Updating..."
         NEEDS_UPDATE=true
     fi
 
-    # Compare and update password
+    # Check if password matches
     if [[ "$CURRENT_PASSWORD" != "$PASSWORD" ]]; then
-        echo "Updating password in application.yml..."
-        sed -i "s/^password: \".*\"/password: \"$PASSWORD\"/" "$APP_YML"
+        echo "Password mismatch detected. Updating..."
         NEEDS_UPDATE=true
     fi
+fi
 
-    # Rebuild worker if updates were applied
-    if [[ "$NEEDS_UPDATE" == true ]]; then
-        echo "Changes detected. Running rebuild_worker.sh..."
-        sh rebuild_worker.sh 2>&1 | tee -a "${CUSTOM_LOG_BASENAME}.log"
-    else
-        echo "No changes needed for application.yml."
-    fi
+# Rewrite application.yml if needed
+if [[ "$NEEDS_UPDATE" == true ]]; then
+    echo "Writing updated application.yml..."
+    echo -e "username: \"$USERNAME\"\npassword: \"$PASSWORD\"" > "$APP_YML"
+    echo "application.yml updated successfully."
 else
-    echo "application.yml not found. Proceeding without updates."
+    echo "No changes needed for application.yml."
 fi
 
 # Start the fact-worker Docker container
