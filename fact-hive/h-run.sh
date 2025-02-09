@@ -99,19 +99,13 @@ if ! sudo docker ps &> /dev/null; then
     sudo systemctl enable --now docker 2>&1 | tee -a "$LOG_FILE"
     sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE"
 
-    # Wait for Docker to start
-    echo "Waiting for Docker to start..."
-    for i in {1..10}; do
-        if sudo docker ps &> /dev/null; then
-            echo "Docker is running now."
-            break
-        fi
-        echo "Retrying... ($i/10)"
-        sleep 5
-    done
-
+    # Check Docker status and log errors if it fails to start
     if ! sudo docker ps &> /dev/null; then
-        echo "Docker daemon could not be started. Exiting..." | tee -a "$LOG_FILE"
+        echo "Docker failed to start. Logging service status..." | tee -a "$LOG_FILE"
+        sudo systemctl status docker 2>&1 | tee -a "$LOG_FILE"
+        echo "Logging Docker journal for further debugging..." | tee -a "$LOG_FILE"
+        sudo journalctl -xeu docker 2>&1 | tee -a "$LOG_FILE"
+        echo "Exiting script. Hive OS will attempt to restart the miner."
         exit 1
     fi
 fi
