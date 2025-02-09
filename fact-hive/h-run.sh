@@ -53,11 +53,20 @@ SETUP_SCRIPT="/hive/miners/custom/fact-hive/setup_worker.sh"
 cleanup() {
     echo "Stopping fact-worker Docker container..." | tee -a "$LOG_FILE"
     sudo docker stop fact-worker 2>&1 | tee -a "$LOG_FILE"
+
+    echo "Enabling and starting hive-watchdog service..." | tee -a "$LOG_FILE"
+    sudo systemctl enable hive-watchdog 2>&1 | tee -a "$LOG_FILE"
+    sudo systemctl start hive-watchdog 2>&1 | tee -a "$LOG_FILE"
     exit 0
 }
 
 # Set trap to catch termination signals (SIGTERM, SIGINT)
 trap cleanup SIGTERM SIGINT
+
+# Disable and stop hive-watchdog before starting the miner
+echo "Disabling and stopping hive-watchdog service..." | tee -a "$LOG_FILE"
+sudo systemctl stop hive-watchdog 2>&1 | tee -a "$LOG_FILE"
+sudo systemctl disable hive-watchdog 2>&1 | tee -a "$LOG_FILE"
 
 # Check for application.yml and update it if needed
 if [[ ! -s "$APP_YML" ]]; then
@@ -73,43 +82,45 @@ if [[ ! -f $SETUP_SCRIPT ]]; then
     chmod +x $SETUP_SCRIPT
 fi
 
-# Check if fact-worker Docker container exists
-if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
-    echo "fact-worker container not found. Checking Docker status..."
+# Check if Docker is installed
+if ! command -v docker &> /dev/null; then
+    echo "Docker is not installed. Installing Docker..." | tee -a "$LOG_FILE"
+    sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
+    sudo apt-get install -y docker.io 2>&1 | tee -a "$LOG_FILE"
+    sudo systemctl enable --now docker 2>&1 | tee -a "$LOG_FILE"
+fi
 
-    # Only attempt to fix Docker if it already exists (setup_worker.sh has been run)
-    if command -v docker &> /dev/null; then
-        echo "Docker is installed. Attempting to fix Docker issues..." | tee -a "$LOG_FILE"
-        sudo apt-get install -y iptables arptables ebtables 2>&1 | tee -a "$LOG_FILE"
-        sudo update-alternatives --set iptables /usr/sbin/iptables-legacy 2>&1 | tee -a "$LOG_FILE"
-        sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>&1 | tee -a "$LOG_FILE"
-        sudo systemctl enable --now docker 2>&1 | tee -a "$LOG_FILE"
-        sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE"
+# Fix Docker issues if needed
+if ! sudo docker ps &> /dev/null; then
+    echo "Docker is installed but not running. Attempting to fix Docker issues..." | tee -a "$LOG_FILE"
+    sudo apt-get install -y iptables arptables ebtables 2>&1 | tee -a "$LOG_FILE"
+    sudo update-alternatives --set iptables /usr/sbin/iptables-legacy 2>&1 | tee -a "$LOG_FILE"
+    sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>&1 | tee -a "$LOG_FILE"
+    sudo systemctl enable --now docker 2>&1 | tee -a "$LOG_FILE"
+    sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE"
 
-        # Wait for Docker to start
-        echo "Waiting for Docker to start..."
-        for i in {1..10}; do
-            if sudo docker ps &> /dev/null; then
-                echo "Docker is running now."
-                break
-            fi
-            echo "Retrying... ($i/10)"
-            sleep 5
-        done
-
-        if ! sudo docker ps &> /dev/null; then
-            echo "Docker daemon could not be started. Exiting..." | tee -a "$LOG_FILE"
-            exit 1
+    # Wait for Docker to start
+    echo "Waiting for Docker to start..."
+    for i in {1..10}; do
+        if sudo docker ps &> /dev/null; then
+            echo "Docker is running now."
+            break
         fi
-    else
-        echo "Docker is not installed. Exiting..."
+        echo "Retrying... ($i/10)"
+        sleep 5
+    done
+
+    if ! sudo docker ps &> /dev/null; then
+        echo "Docker daemon could not be started. Exiting..." | tee -a "$LOG_FILE"
         exit 1
     fi
+fi
 
-    # Retry setup_worker.sh after fixing Docker
-    echo "Retrying setup_worker.sh after fixing Docker..."
+# Start or install the fact-worker Docker container
+if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
+    echo "fact-worker container not found. Installing..."
     if ! sh $SETUP_SCRIPT "$USERNAME" "$PASSWORD" 2>&1 | tee -a "$LOG_FILE"; then
-        echo "setup_worker.sh failed even after fixing Docker. Exiting..."
+        echo "setup_worker.sh failed. Exiting..."
         exit 1
     fi
 else
