@@ -83,35 +83,10 @@ if [[ ! -f $SETUP_SCRIPT ]]; then
 fi
 
 # Check if Docker is installed
-#if ! command -v docker &> /dev/null; then
-#    echo "Docker is not installed. Installing Docker..." | tee -a "$LOG_FILE"
-#    sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
-#    sudo apt-get install -y docker.io 2>&1 | tee -a "$LOG_FILE"
-#    sudo systemctl enable --now docker 2>&1 | tee -a "$LOG_FILE"
-#fi
+# REMOVED
 
-# Fix Docker issues if needed (DISABLED)
-fixdocker() {
-    if ! sudo docker ps &> /dev/null; then
-    echo "Docker is installed but not running. Attempting to fix Docker issues..." | tee -a "$LOG_FILE"
-    sudo apt-get install -y iptables arptables ebtables 2>&1 | tee -a "$LOG_FILE"
-    sudo update-alternatives --set iptables /usr/sbin/iptables-legacy 2>&1 | tee -a "$LOG_FILE"
-    sudo update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>&1 | tee -a "$LOG_FILE"
-    sudo systemctl enable --now docker 2>&1 | tee -a "$LOG_FILE"
-    sudo systemctl restart docker 2>&1 | tee -a "$LOG_FILE"
-
-    # Check Docker status and log errors if it fails to start
-    if ! sudo docker ps &> /dev/null; then
-        echo "Docker failed to start. Logging service status..." | tee -a "$LOG_FILE"
-        sudo systemctl status docker 2>&1 | tee -a "$LOG_FILE"
-        echo "Logging Docker journal for further debugging..." | tee -a "$LOG_FILE"
-        sudo journalctl -xeu docker 2>&1 | tee -a "$LOG_FILE"
-        echo "Exiting script. Hive OS will attempt to restart the miner."
-        exit 1
-    fi
-    fi
-}
-# fixdocker();
+# Fix Docker issues if needed
+# REMOVED
 
 # Start or install the fact-worker Docker container
 if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
