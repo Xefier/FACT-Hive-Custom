@@ -83,15 +83,16 @@ if [[ ! -f $SETUP_SCRIPT ]]; then
 fi
 
 # Check if Docker is installed
-if ! command -v docker &> /dev/null; then
-    echo "Docker is not installed. Installing Docker..." | tee -a "$LOG_FILE"
-    sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
-    sudo apt-get install -y docker.io 2>&1 | tee -a "$LOG_FILE"
-    sudo systemctl enable --now docker 2>&1 | tee -a "$LOG_FILE"
-fi
+#if ! command -v docker &> /dev/null; then
+#    echo "Docker is not installed. Installing Docker..." | tee -a "$LOG_FILE"
+#    sudo apt-get update 2>&1 | tee -a "$LOG_FILE"
+#    sudo apt-get install -y docker.io 2>&1 | tee -a "$LOG_FILE"
+#    sudo systemctl enable --now docker 2>&1 | tee -a "$LOG_FILE"
+#fi
 
-# Fix Docker issues if needed
-if ! sudo docker ps &> /dev/null; then
+# Fix Docker issues if needed (DISABLED)
+fixdocker() {
+    if ! sudo docker ps &> /dev/null; then
     echo "Docker is installed but not running. Attempting to fix Docker issues..." | tee -a "$LOG_FILE"
     sudo apt-get install -y iptables arptables ebtables 2>&1 | tee -a "$LOG_FILE"
     sudo update-alternatives --set iptables /usr/sbin/iptables-legacy 2>&1 | tee -a "$LOG_FILE"
@@ -108,13 +109,16 @@ if ! sudo docker ps &> /dev/null; then
         echo "Exiting script. Hive OS will attempt to restart the miner."
         exit 1
     fi
-fi
+    fi
+}
+# fixdocker();
 
 # Start or install the fact-worker Docker container
 if ! sudo docker ps -a --format "{{.Names}}" | grep -q "^fact-worker$"; then
     echo "fact-worker container not found. Installing..."
     if ! sh $SETUP_SCRIPT "$USERNAME" "$PASSWORD" 2>&1 | tee -a "$LOG_FILE"; then
         echo "setup_worker.sh failed. Exiting..."
+        sleep 10s
         exit 1
     fi
 else
