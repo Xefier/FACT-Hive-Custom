@@ -54,9 +54,9 @@ cleanup() {
     echo "Stopping fact-worker Docker container..." | tee -a "$LOG_FILE"
     sudo docker stop fact-worker 2>&1 | tee -a "$LOG_FILE"
 
-    echo "Enabling and starting hive-watchdog service..." | tee -a "$LOG_FILE"
-    sudo systemctl enable hive-watchdog 2>&1 | tee -a "$LOG_FILE"
-    sudo systemctl start hive-watchdog 2>&1 | tee -a "$LOG_FILE"
+#    echo "Enabling and starting hive-watchdog service..." | tee -a "$LOG_FILE"
+#    sudo systemctl enable hive-watchdog 2>&1 | tee -a "$LOG_FILE"
+#    sudo systemctl start hive-watchdog 2>&1 | tee -a "$LOG_FILE"
     exit 0
 }
 
